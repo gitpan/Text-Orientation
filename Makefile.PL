@@ -4,7 +4,9 @@ use ExtUtils::MakeMaker;
 WriteMakefile(
     'NAME'		=> 'Text::Orientation',
     'VERSION_FROM'	=> 'Orientation.pm', # finds $VERSION
-    'PREREQ_PM'		=> {}, # e.g., Module::Name => 1.1
+    'PREREQ_PM'		=> {
+        'String::Multibyte'  => '1',
+    },
     ($] >= 5.005 ?    ## Add these new keywords supported since 5.005
       (ABSTRACT_FROM => 'Orientation.pm', # retrieve abstract from module
        AUTHOR     => 'xern <xern@cpan.org>') : ()),
