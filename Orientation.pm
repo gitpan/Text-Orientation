@@ -2,18 +2,22 @@ package Text::Orientation;
 use 5.006;
 use String::Multibyte;
 use Text::Orientation::StringOperation;
-our $VERSION = '0.03';
+our $VERSION = '0.04';
+
+#
+# O_O;;
+#
 
 sub new{
     my $pkg = shift;;
     my %arg = @_;
     bless {
-	_TEXTREF => ref($arg{TEXT}) eq "ARRAY" ? $arg{TEXT} : [ split($/, $arg{TEXT}) ],
+	_TEXTREF => ref($arg{TEXT}) eq "ARRAY" ? $arg{TEXT} : [ split("\n", $arg{TEXT}) ],
 	_CHARSET => $arg{CHARSET},
     }, $pkg;
 }
 
-sub text { $_[0]->{_TEXTREF} = ref($_[1]) eq "ARRAY" ? $_[1] : [ split($/, $_[1])] }
+sub text { $_[0]->{_TEXTREF} = ref($_[1]) eq "ARRAY" ? $_[1] : [ split("\n", $_[1])] }
 sub charset { $_[0]->{_CHARSET} = $_[1] }
 
 sub maxlen {
@@ -29,17 +33,26 @@ sub maxlen {
 }
 
 
-sub transpose      { $_[0]->manip('transpose',  0) }
-sub anti_transpose { $_[0]->manip('transpose',  1) }
+sub transpose      { $_[0]->manip('transpose') }
+sub anti_transpose { $_[0]->manip('anti_transpose') }
 sub mirror         { $_[0]->manip('mirror', $_[1]) }
 sub rotate         { $_[0]->manip('rotate', $_[1]) }
 
 sub manip {
     my ($pkg, $method, $options) = @_;
-    {transpose => \&_transpose,
-     anti_transpose => \&_anti_transpose,
-     rotate    => \&_rotate,
-     mirror    => \&_mirror}->{$method}->($pkg->{_TEXTREF}, $pkg->{_CHARSET}, $options);
+    {
+	transpose      => \&_transpose,
+	anti_transpose => \&_transpose,
+	rotate         => \&_rotate,
+	mirror         => \&_mirror,
+    }->{$method}->(
+		   $pkg->{_TEXTREF},
+		   $pkg->{_CHARSET},
+		   {
+		       transpose => 1,
+		       anti_transpose => 2,
+		   }->{$method} || $options
+		   );
 }
 
 sub _transpose{
@@ -50,12 +63,13 @@ sub _transpose{
     $ml = maxlen($textref, $charset);
     for my $i (0..$#{$textref}){
 	for my $k (0..$mb->length($textref->[$i])-1){
-	    ($row, $col) = $options ? ($mb->length($textref->[$i])-1- $k, $#{$textref}-$i) : ($k, $i);
+	    ($row, $col) = $options == 2?
+		($mb->length($textref->[$i])-1- $k, $#{$textref}-$i) : ($k, $i);
 	    $core->[$row]->[$col] = $mb->substr($textref->[$i], $k, 1);
 	}
     }
     for my $i (0..$#{$core}){
-	$text .= join('', @{$core->[$i]}).($i!=$#{$core}?$/:'');
+	$text .= join('', @{$core->[$i]}).($i!=$#{$core}?"\n":'');
     }
     $text;
 }    
@@ -65,11 +79,11 @@ sub _mirror {
     my $mb = Text::Orientation::StringOperation->new($charset);
     my $text;
     if($options =~ /vertical/io){
-	$text = join $/, reverse @{$textref};
+	$text = join( "\n", reverse @{$textref}), "\n";
     }
     elsif($options =~ /horizontal/io){
 	my $ml = maxlen($textref, '');
-	$text = join $/, map { ' 'x($ml-length$_).$mb->reverse($_) } @{$textref}
+	$text = join( "\n", map { ' 'x($ml-length$_).$mb->reverse($_) } @{$textref});
     }
     $text;
 }
@@ -93,7 +107,7 @@ sub _rotate {
     }
     elsif($dir == 2){
 	return _mirror(
-		       [ split $/,_mirror($textref, $charset, 'horizontal') ],
+		       [ split "\n",_mirror($textref, $charset, 'horizontal') ],
 		       $charset, 'vertical'
 		       );
     }
@@ -106,10 +120,45 @@ sub _rotate {
 	}
     }
     for my $i (0..$#{$core}){
-	$text .= join('', @{$core->[$i]}).($i!=$#{$core}?$/:'');
+	$text .= join('', @{$core->[$i]}).($i!=$#{$core}?"\n":'');
     }
     $text;
 }
+
+
+#
+# PerlIO layer
+#
+
+our $method;
+our $param;
+our $charset;
+
+sub import {
+    shift;
+    my %arg = @_;
+    $method = lc $arg{method};
+    $param = $method ? lc $arg{param} : undef;
+    $charset = $method ? $arg{charset} : undef;
+}
+
+sub PUSHED {
+    die "Lacking method\n" unless $method;
+    $_[0]->new( TEXT => undef, CHARSET => $charset );
+}
+sub FILL { my $line = <$_[1]>; $line ? $line : "\n" }
+sub WRITE {
+    $_[0]->{_TEXT} .= $_[1];
+    return length($_[1]);
+}
+sub FLUSH {
+    my ($obj,$fh) = @_;
+    $obj->text($obj->{_TEXT});
+    print $fh $obj->manip($method, $param) or return -1;
+    $obj->{_TEXT} = '';
+    return 0;
+}
+
 
 1;
 __END__
@@ -122,13 +171,27 @@ Text::Orientation - Text Rotator
 =head1 SYNOPSIS
 
   use Text::Orientation;
+
+  # OO
+
   $rot = Text::Orientation->new( TEXT => "Rotate me!" );
   print $rot->mirror('horizontal');
   print $rot->rotate(+1);
 
+
+  # PerlIO layer
+
+  use Text::Orientation method => 'mirror', param => 'horizontal', charset=> 'Big5';
+  binmode(STDOUT, ":via(Text::Orientation)") or die;
+
+  print BLAH BLAH BLAH ...
+
+
 =head1 DESCRIPTION
 
 This module enables one to rotate text. For example, Chinese can be written downwards or leftwards, but it is usually not convenient to do so on one's computer. With Text::Orientation one can easily deal with this problem.
+
+PerlIO layer interface is also provided for easier coding.
 
 =head1 METHODS
 
