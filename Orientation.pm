@@ -2,19 +2,21 @@ package Text::Orientation;
 use 5.006;
 use String::Multibyte;
 use Text::Orientation::StringOperation;
-our $VERSION = '0.02';
+our $VERSION = '0.03';
 
 sub new{
+    my $pkg = shift;;
+    my %arg = @_;
     bless {
-	_TEXTREF => ref($_[1]->{TEXT}) eq "ARRAY" ? $_[1] : [ split($/, $_[1]->{TEXT}) ],
-	_CHARSET => $_[1]->{CHARSET},
-    }, $_[0];
+	_TEXTREF => ref($arg{TEXT}) eq "ARRAY" ? $arg{TEXT} : [ split($/, $arg{TEXT}) ],
+	_CHARSET => $arg{CHARSET},
+    }, $pkg;
 }
 
-sub text($$){ $_[0]->{_TEXTREF} = ref($_[1]) eq "ARRAY" ? $_[1] : [ split($/, $_[1])] }
-sub charset($$){ $_[0]->{_CHARSET} = $_[1] }
+sub text { $_[0]->{_TEXTREF} = ref($_[1]) eq "ARRAY" ? $_[1] : [ split($/, $_[1])] }
+sub charset { $_[0]->{_CHARSET} = $_[1] }
 
-sub maxlen($$){
+sub maxlen {
     my $maxlen = 0;
     if($_[1]){
 	my $mb = Text::Orientation::StringOperation->new($_[1]);
@@ -26,12 +28,16 @@ sub maxlen($$){
     $maxlen;
 }
 
-sub transpose($){ $_[0]->manip('transpose') }
-sub mirror($$)  { $_[0]->manip('mirror', $_[1]) }
-sub rotate($$)  { $_[0]->manip('rotate', $_[1]) }
-sub manip($$;$){
+
+sub transpose      { $_[0]->manip('transpose',  0) }
+sub anti_transpose { $_[0]->manip('transpose',  1) }
+sub mirror         { $_[0]->manip('mirror', $_[1]) }
+sub rotate         { $_[0]->manip('rotate', $_[1]) }
+
+sub manip {
     my ($pkg, $method, $options) = @_;
     {transpose => \&_transpose,
+     anti_transpose => \&_anti_transpose,
      rotate    => \&_rotate,
      mirror    => \&_mirror}->{$method}->($pkg->{_TEXTREF}, $pkg->{_CHARSET}, $options);
 }
@@ -40,10 +46,12 @@ sub _transpose{
     my ($textref, $charset, $options) = @_;
     my $mb = Text::Orientation::StringOperation->new($charset);
     my ($core, $text, $ml);
+    my ($row, $col);
     $ml = maxlen($textref, $charset);
     for my $i (0..$#{$textref}){
 	for my $k (0..$mb->length($textref->[$i])-1){
-	    $core->[$k]->[$i] = $mb->substr($textref->[$i], $k, 1);
+	    ($row, $col) = $options ? ($mb->length($textref->[$i])-1- $k, $#{$textref}-$i) : ($k, $i);
+	    $core->[$row]->[$col] = $mb->substr($textref->[$i], $k, 1);
 	}
     }
     for my $i (0..$#{$core}){
@@ -52,7 +60,7 @@ sub _transpose{
     $text;
 }    
 
-sub _mirror($$$){
+sub _mirror {
     my ($textref, $charset, $options) = @_;
     my $mb = Text::Orientation::StringOperation->new($charset);
     my $text;
@@ -66,7 +74,7 @@ sub _mirror($$$){
     $text;
 }
 
-sub _rotate($$){
+sub _rotate {
     my ($textref, $charset, $dir) = @_;
     $dir %= 4;
     my $mb = Text::Orientation::StringOperation->new($charset);
@@ -114,7 +122,7 @@ Text::Orientation - Text Rotator
 =head1 SYNOPSIS
 
   use Text::Orientation;
-  $rot = Text::Orientation->new({ TEXT => "Rotate me!" });
+  $rot = Text::Orientation->new( TEXT => "Rotate me!" );
   print $rot->mirror('horizontal');
   print $rot->rotate(+1);
 
@@ -124,10 +132,12 @@ This module enables one to rotate text. For example, Chinese can be written down
 
 =head1 METHODS
 
-=head2 new({ TEXT => string or reference , CHARSET => 'blahblah charset' })
+=head2 new
+
+ $rot = Text::Orientation->new( TEXT => text or text's ref, CHARSET => blah);
 
 Constructor. As for TEXT, either a string or a reference to an array of text will do.
-Please specify CHARSET If the input text is encoded multibyte character set.
+Please specify CHARSET If the input text is encoded in multibyte character set.
 
 =head2 charset
 
@@ -140,6 +150,10 @@ Changes the text to rotate.
 =head2 transpose
 
 Transposes text along the diagonal.
+
+=head2 anti_transpose
+
+Transposes text along the antidiagonal.
 
 =head2 mirror
 
